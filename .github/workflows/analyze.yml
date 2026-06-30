@@ -58,21 +58,32 @@ jobs:
             --dir binary
 
       - name: Download PDB (if BDS binary)
+        id: pdb-download
         if: inputs.binary_is_bds == 'true'
         run: |
           gh release download "${{ inputs.release_tag }}" \
             --pattern "*.pdb" \
             --dir binary
+          PDB_FILE=$(ls binary/*.pdb 2>/dev/null | head -1)
+          if [ -n "$PDB_FILE" ]; then
+            echo "pdb_path=$PDB_FILE" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run Ghidra headless analysis + export functions
         run: |
           OUT_DIR="$GITHUB_WORKSPACE/output"
           mkdir -p "$OUT_DIR/project"
 
+          PRESCRIPT_ARGS=""
+          if [ -n "${{ steps.pdb-download.outputs.pdb_path }}" ]; then
+            PRESCRIPT_ARGS="-preScript SetPdbPath.java ${{ steps.pdb-download.outputs.pdb_path }}"
+          fi
+
           "$GHIDRA_DIR/support/analyzeHeadless" \
             "$OUT_DIR/project" \
             "MinecraftAnalysis" \
             -vmarg "-Xmx6g" \
+            $PRESCRIPT_ARGS \
             -import "$GITHUB_WORKSPACE/binary/${{ inputs.asset_name }}" \
             -scriptPath "$GITHUB_WORKSPACE/ghidra_scripts" \
             -postScript ExportFunctions.java "$OUT_DIR/functions.json" \
