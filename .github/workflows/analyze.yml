@@ -1,4 +1,4 @@
-name: Analyze Binary
+name: Binary Analyzer
 
 on:
   workflow_dispatch:
