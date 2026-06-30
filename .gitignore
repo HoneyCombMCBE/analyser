@@ -1,0 +1,17 @@
+# Binary inputs / outputs
+binary/
+output/
+*.gpr
+*.gar
+*.rep
+
+# Ghidra distribution
+ghidra_*/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db

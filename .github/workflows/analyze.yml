@@ -1,0 +1,86 @@
+name: Analyze Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag containing the binary asset'
+        required: true
+        type: string
+      asset_name:
+        description: 'Binary asset filename (e.g. Minecraft.Windows.exe)'
+        required: true
+        type: string
+      binary_is_bds:
+        description: 'Is this a BDS binary (with PDB symbols)?'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GHIDRA_VERSION: 12.1.2
+  GHIDRA_ZIP: ghidra_12.1.2_PUBLIC_20260605.zip
+  GHIDRA_URL: https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.2_build/ghidra_12.1.2_PUBLIC_20260605.zip
+  GHIDRA_DIR: ghidra_12.1.2_PUBLIC
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Ghidra
+        id: cache-ghidra
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GHIDRA_DIR }}
+          key: ghidra-${{ env.GHIDRA_VERSION }}
+
+      - name: Download and extract Ghidra
+        if: steps.cache-ghidra.outputs.cache-hit != 'true'
+        run: |
+          wget -q "$GHIDRA_URL" -O "$GHIDRA_ZIP"
+          unzip -q "$GHIDRA_ZIP"
+          rm "$GHIDRA_ZIP"
+
+      - name: Download binary from release
+        run: |
+          gh release download "${{ inputs.release_tag }}" \
+            --pattern "${{ inputs.asset_name }}" \
+            --dir binary
+
+      - name: Download PDB (if BDS binary)
+        if: inputs.binary_is_bds == 'true'
+        run: |
+          gh release download "${{ inputs.release_tag }}" \
+            --pattern "*.pdb" \
+            --dir binary
+
+      - name: Run Ghidra headless analysis + export functions
+        run: |
+          OUT_DIR="$GITHUB_WORKSPACE/output"
+          mkdir -p "$OUT_DIR/project"
+
+          "$GHIDRA_DIR/support/analyzeHeadless" \
+            "$OUT_DIR/project" \
+            "MinecraftAnalysis" \
+            -import "$GITHUB_WORKSPACE/binary/${{ inputs.asset_name }}" \
+            -scriptPath "$GITHUB_WORKSPACE/ghidra_scripts" \
+            -postScript ExportFunctions.java "$OUT_DIR/functions.json" \
+            -overwrite
+
+      - name: Compress analyzed project
+        run: |
+          cd output
+          zip -r ghidra_project.zip project/
+          cd ..
+
+      - name: Upload artifacts to release
+        run: |
+          gh release upload "${{ inputs.release_tag }}" \
+            output/functions.json \
+            output/ghidra_project.zip \
+            --clobber
