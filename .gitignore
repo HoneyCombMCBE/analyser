@@ -1,6 +1,7 @@
 # Binary inputs / outputs
 binary/
 output/
+testbin/
 *.gpr
 *.gar
 *.rep
