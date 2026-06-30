@@ -2,6 +2,8 @@
 binary/
 output/
 testbin/
+bds_binary/
+*.zip
 *.gpr
 *.gar
 *.rep
