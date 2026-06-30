@@ -78,15 +78,17 @@ jobs:
 
           PRESCRIPT_ARGS=""
           if [ -n "${{ steps.pdb-download.outputs.pdb_path }}" ]; then
+            cp "$GITHUB_WORKSPACE/ghidra_scripts/SetPdbPath.java" \
+               "$HOME/.ghidra/ghidra_12.1.2_PUBLIC/ghidra_scripts/"
             PRESCRIPT_ARGS="-preScript SetPdbPath.java ${{ steps.pdb-download.outputs.pdb_path }}"
           fi
 
           "$GHIDRA_DIR/support/analyzeHeadless" \
             "$OUT_DIR/project" \
             "MinecraftAnalysis" \
+            -import "$GITHUB_WORKSPACE/binary/${{ inputs.asset_name }}" \
             -scriptPath "$GITHUB_WORKSPACE/ghidra_scripts" \
             $PRESCRIPT_ARGS \
-            -import "$GITHUB_WORKSPACE/binary/${{ inputs.asset_name }}" \
             -postScript ExportFunctions.java "$OUT_DIR/functions.json" \
             -overwrite
 
