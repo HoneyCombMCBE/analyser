@@ -5,8 +5,8 @@ output/
 *.gar
 *.rep
 
-# Ghidra distribution
-ghidra_*/
+# Ghidra distribution (versioned dirs like ghidra_11.3_PUBLIC)
+ghidra_[0-9]*/
 
 # Python cache
 __pycache__/
