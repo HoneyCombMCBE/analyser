@@ -59,7 +59,7 @@ jobs:
 
       - name: Download PDB (if BDS binary)
         id: pdb-download
-        if: inputs.binary_is_bds == 'true'
+        if: inputs.binary_is_bds
         run: |
           gh release download "${{ inputs.release_tag }}" \
             --pattern "*.pdb" \
