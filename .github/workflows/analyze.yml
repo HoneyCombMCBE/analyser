@@ -78,8 +78,6 @@ jobs:
 
           PRESCRIPT_ARGS=""
           if [ -n "${{ steps.pdb-download.outputs.pdb_path }}" ]; then
-            cp "$GITHUB_WORKSPACE/ghidra_scripts/SetPdbPath.java" \
-               "$HOME/.ghidra/ghidra_12.1.2_PUBLIC/ghidra_scripts/"
             PRESCRIPT_ARGS="-preScript SetPdbPath.java ${{ steps.pdb-download.outputs.pdb_path }}"
           fi
 
