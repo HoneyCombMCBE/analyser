@@ -29,7 +29,7 @@ env:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
