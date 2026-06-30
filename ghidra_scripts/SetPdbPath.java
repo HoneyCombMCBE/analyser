@@ -1,10 +1,6 @@
 import java.io.*;
 import ghidra.app.script.GhidraScript;
-import ghidra.features.base.values.*;
-import ghidra.program.model.listing.*;
-import pdb.PdbPlugin;
-import pdb.symbolserver.*;
-import pdb.question.*;
+import ghidra.app.plugin.core.analysis.PdbUniversalAnalyzer;
 
 public class SetPdbPath extends GhidraScript {
 
@@ -20,7 +16,7 @@ public class SetPdbPath extends GhidraScript {
             println("PDB file not found: " + pdbFile.getAbsolutePath());
             return;
         }
-        PdbPlugin.setPdbFileOption(currentProgram, pdbFile);
+        PdbUniversalAnalyzer.setPdbFileOption(currentProgram, pdbFile);
         println("Set PDB path: " + pdbFile.getAbsolutePath());
     }
 }
