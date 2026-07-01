@@ -25,6 +25,7 @@ env:
   GHIDRA_ZIP: ghidra_12.1.2_PUBLIC_20260605.zip
   GHIDRA_URL: https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.2_build/ghidra_12.1.2_PUBLIC_20260605.zip
   GHIDRA_DIR: ghidra_12.1.2_PUBLIC
+  BINEXPORT_COMMIT: main
 
 jobs:
   analyze:
@@ -51,6 +52,34 @@ jobs:
           unzip -q "$GHIDRA_ZIP"
           rm "$GHIDRA_ZIP"
 
+      - name: Cache BinExport extension
+        id: cache-binexport
+        uses: actions/cache@v4
+        with:
+          path: binexport-extension
+          key: binexport-${{ env.GHIDRA_VERSION }}-${{ env.BINEXPORT_COMMIT }}
+
+      - name: Build BinExport extension
+        if: steps.cache-binexport.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://github.com/google/binexport.git binexport-src
+          cd binexport-src/java
+
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip -O gradle.zip
+          unzip -q gradle.zip
+          export PATH="$PWD/gradle-8.7/bin:$PATH"
+
+          gradle -PGHIDRA_INSTALL_DIR="$GITHUB_WORKSPACE/$GHIDRA_DIR"
+
+          mkdir -p "$GITHUB_WORKSPACE/binexport-extension"
+          cp dist/*.zip "$GITHUB_WORKSPACE/binexport-extension/"
+
+      - name: Install BinExport extension
+        run: |
+          EXT_DIR="$GHIDRA_DIR/Ghidra/Extensions"
+          mkdir -p "$EXT_DIR"
+          unzip -q -o binexport-extension/*.zip -d "$EXT_DIR"
+
       - name: Download binary from release
         run: |
           gh release download "${{ inputs.release_tag }}" \
@@ -69,7 +98,7 @@ jobs:
             echo "pdb_path=$PDB_FILE" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run Ghidra headless analysis + export functions
+      - name: Run Ghidra headless analysis + export
         env:
           JAVA_TOOL_OPTIONS: -Xmx6g
         run: |
@@ -88,17 +117,14 @@ jobs:
             -scriptPath "$GITHUB_WORKSPACE/ghidra_scripts" \
             $PRESCRIPT_ARGS \
             -postScript ExportFunctions.java "$OUT_DIR/functions.json" \
+            -postScript ExportGzf.java "$OUT_DIR/ghidra_project.gzf" \
+            -postScript BinExport.java "$OUT_DIR/output.BinExport" \
             -overwrite
-
-      - name: Compress analyzed project
-        run: |
-          cd output
-          zip -r ghidra_project.zip project/
-          cd ..
 
       - name: Upload artifacts to release
         run: |
           gh release upload "${{ inputs.release_tag }}" \
             output/functions.json \
-            output/ghidra_project.zip \
+            output/ghidra_project.gzf \
+            output/output.BinExport \
             --clobber

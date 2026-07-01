@@ -1,11 +1,15 @@
 import java.io.*;
+import java.util.*;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.address.*;
 import ghidra.program.model.mem.*;
+import ghidra.program.model.lang.OperandType;
 import ghidra.util.exception.*;
 
 public class ExportFunctions extends GhidraScript {
+
+    private static final int SIG_MAX_BYTES = 64;
 
     @Override
     protected void run() throws Exception {
@@ -17,6 +21,7 @@ public class ExportFunctions extends GhidraScript {
         String outputPath = args[0];
 
         FunctionManager fm = currentProgram.getFunctionManager();
+        Listing listing = currentProgram.getListing();
         Memory memory = currentProgram.getMemory();
 
         StringBuilder json = new StringBuilder(1024 * 1024);
@@ -59,7 +64,10 @@ public class ExportFunctions extends GhidraScript {
                     hex.append("ERROR");
                 }
             }
-            json.append("\"bytes\": \"").append(hex).append("\"");
+            json.append("\"bytes\": \"").append(hex).append("\",");
+
+            String sig = buildSignature(listing, memory, func);
+            json.append("\"signature\": \"").append(sig).append("\"");
 
             json.append("}");
             total++;
@@ -74,6 +82,66 @@ public class ExportFunctions extends GhidraScript {
         }
 
         println("Exported " + total + " functions to " + outputPath);
+    }
+
+    private String buildSignature(Listing listing, Memory memory, Function func) {
+        Address entry = func.getEntryPoint();
+        AddressSetView body = func.getBody();
+        StringBuilder sig = new StringBuilder();
+        int byteCount = 0;
+
+        InstructionIterator iter = listing.getInstructions(body, true);
+        while (iter.hasNext() && byteCount < SIG_MAX_BYTES) {
+            Instruction insn = iter.next();
+            byte[] insnBytes;
+            try {
+                int len = insn.getLength();
+                insnBytes = new byte[len];
+                memory.getBytes(insn.getAddress(), insnBytes);
+            } catch (MemoryAccessException e) {
+                break;
+            }
+
+            boolean[] mask = new boolean[insnBytes.length];
+            Arrays.fill(mask, true);
+
+            int numOps = insn.getNumOperands();
+            for (int op = 0; op < numOps; op++) {
+                int opType = insn.getOperandType(op);
+                boolean isAddr = (opType & OperandType.ADDRESS) != 0;
+                boolean isDynamic = (opType & OperandType.DYNAMIC) != 0;
+                if (!isAddr && !isDynamic) continue;
+
+                List<Object> opObjects = insn.getDefaultOperandRepresentationList(op);
+                for (Object obj : opObjects) {
+                    if (obj instanceof Address) {
+                        wildcardOperandBytes(insn, insnBytes, mask);
+                        break;
+                    }
+                }
+            }
+
+            for (int i = 0; i < insnBytes.length && byteCount < SIG_MAX_BYTES; i++) {
+                if (sig.length() > 0) sig.append(' ');
+                if (mask[i]) {
+                    sig.append(String.format("%02X", insnBytes[i] & 0xFF));
+                } else {
+                    sig.append('?');
+                }
+                byteCount++;
+            }
+        }
+
+        return sig.toString();
+    }
+
+    private void wildcardOperandBytes(Instruction insn, byte[] insnBytes, boolean[] mask) {
+        int prefixLen = insn.getPrototype().getPrefixLength();
+        int opLen = insn.getPrototype().getOpCodeLength();
+        int start = prefixLen + opLen;
+        for (int i = start; i < mask.length; i++) {
+            mask[i] = false;
+        }
     }
 
     private String escape(String s) {

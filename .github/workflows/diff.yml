@@ -1,0 +1,95 @@
+name: Binary Differ
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      edu_release_tag:
+        description: 'Release tag for the Education Edition binary'
+        required: true
+        type: string
+      bds_release_tag:
+        description: 'Release tag for the BDS binary (with PDB symbols)'
+        required: true
+        type: string
+      similarity_threshold:
+        description: 'Minimum BinDiff similarity score (0.0–1.0)'
+        required: false
+        default: '0.7'
+        type: string
+
+env:
+  BINDIFF_DEB: bindiff_8_amd64.deb
+  BINDIFF_URL: https://github.com/google/bindiff/releases/download/v8/bindiff_8_amd64.deb
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Edu artifacts
+        run: |
+          mkdir -p artifacts/edu
+          gh release download "${{ inputs.edu_release_tag }}" \
+            --pattern "functions.json" \
+            --pattern "output.BinExport" \
+            --dir artifacts/edu
+
+      - name: Download BDS artifacts
+        run: |
+          mkdir -p artifacts/bds
+          gh release download "${{ inputs.bds_release_tag }}" \
+            --pattern "functions.json" \
+            --pattern "output.BinExport" \
+            --dir artifacts/bds
+
+      - name: Cache BinDiff
+        id: cache-bindiff
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BINDIFF_DEB }}
+          key: bindiff-v8
+
+      - name: Download BinDiff
+        if: steps.cache-bindiff.outputs.cache-hit != 'true'
+        run: wget -q "$BINDIFF_URL" -O "$BINDIFF_DEB"
+
+      - name: Install BinDiff
+        run: sudo dpkg -i "$BINDIFF_DEB" || sudo apt-get install -f -y
+
+      - name: Run BinDiff
+        run: |
+          mkdir -p diff_output
+          bindiff \
+            --primary artifacts/bds/output.BinExport \
+            --secondary artifacts/edu/output.BinExport \
+            --output_dir diff_output
+
+      - name: Generate signatures
+        run: |
+          BINDIFF_DB=$(ls diff_output/*.BinDiff 2>/dev/null | head -1)
+          if [ -z "$BINDIFF_DB" ]; then
+            echo "ERROR: No .BinDiff output found"
+            exit 1
+          fi
+
+          python3 scripts/generate_signatures.py \
+            "$BINDIFF_DB" \
+            artifacts/bds/functions.json \
+            artifacts/edu/functions.json \
+            "${{ inputs.similarity_threshold }}" \
+            output/signatures.json
+
+      - name: Upload signatures to Edu release
+        run: |
+          gh release upload "${{ inputs.edu_release_tag }}" \
+            output/signatures.json \
+            --clobber
